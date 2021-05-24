@@ -20,7 +20,7 @@ import (
 
 var db *gorm.DB
 
-func Setup() {
+func init() {
 	db = DataBase.GetDB()
 }
 
@@ -73,7 +73,7 @@ func ParseToken(accessToken string) (*tokenClaims, error) {
 }
 
 func ErrorHandler(c *gin.Context, err error) {
-
+	fmt.Println("[Response]: ", err.Error())
 	c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 }
 
@@ -87,6 +87,8 @@ func CreateUser(c *gin.Context) {
 		ErrorHandler(c, err)
 		return
 	}
+
+	fmt.Println("[Request]: ", newUser)
 
 	validate = validator.New()
 
@@ -106,16 +108,22 @@ func CreateUser(c *gin.Context) {
 	newUser.Password, err = HashPassword(newUser.Password)
 	if err != nil {
 		log.Println("Can't hash the password:", err)
+		ErrorHandler(c, err)
 		return
 	}
 
 	login := newUser.Login
-	count := db.First(&users, "login=?", login).RowsAffected
+	fmt.Println("---------------------------------------------------------------------------------------------")
+	count := db.First(&users, "login = ?", login).RowsAffected
+
 	if count > 0 {
 		ErrorHandler(c, errors.New("this login is already exist"))
 		return
 	} else {
 		db.Create(&newUser)
+		fmt.Println("[Response]: user added")
+		c.JSON(http.StatusOK, gin.H{"message": "user added"})
+		return
 	}
 
 }
@@ -143,11 +151,11 @@ func Entry(c *gin.Context) {
 		return
 	}
 	login := RequestUser.Login
-	
+
 	count := db.First(&userFromDb, "login=?", login).RowsAffected
 
 	ok := CheckPasswordHash(RequestUser.Password, userFromDb.Password)
-	fmt.Println("count: ",count, "ok = ", ok)
+	fmt.Println("count: ", count, "ok = ", ok)
 	if count == 1 && ok == true {
 		token, err := GenerateToken(login)
 		if err != nil {
@@ -158,7 +166,7 @@ func Entry(c *gin.Context) {
 		return
 
 	} else {
-			ErrorHandler(c, errors.New("wrong login or password"))
+		ErrorHandler(c, errors.New("wrong login or password"))
 	}
 
 }
@@ -223,17 +231,18 @@ func verifyPassword(password string) error {
 			errorString = err
 		}
 	}
+	msg := "password: "
 	if !lowercasePresent {
-		appendError("lowercase letter missing")
+		appendError(msg + "lowercase letter missing")
 	}
 	if !uppercasePresent {
-		appendError("uppercase letter missing")
+		appendError(msg + "uppercase letter missing")
 	}
 	if !numberPresent {
-		appendError("atleast one numeric character required")
+		appendError(msg + "at least one numeric character required")
 	}
 	if !specialCharPresent {
-		appendError("special character missing")
+		appendError(msg + "special character missing")
 	}
 	if !(minPassLength <= passLen && passLen <= maxPassLength) {
 		appendError(fmt.Sprintf("password length must be between %d to %d characters long", minPassLength, maxPassLength))
